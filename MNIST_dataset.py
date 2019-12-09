@@ -19,7 +19,7 @@ class Dataset(torch.utils.data.Dataset):
         
         np.random.seed(0)
         
-        root = '/pghbio/dbmi/batmanlab/juc91/data/MNIST/'
+        root = '.'
         
         trans = transforms.ToTensor()
                                     

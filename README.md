@@ -21,26 +21,23 @@ To prepare for the environment for running our code, run
 We include an example of training script in test.ipynb. 
 ## MNIST with binary pairwise labels
 We train the model with binary pairwise labels for the MNIST dataset. The embedding and generated results are shown below:
-<div class="row">
-    <div class="column">
-        <img width="45%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/binary_embedding.png">
-    </div>
-    <div class="column">
-        <img width="45%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/binary_generated.png">
-    </div>
-</div>
+
+<p float="left">
+  <img src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/binary_embedding.png"
+ width="45%" />
+  <img src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/binary_generated.png" width="45%" /> 
+</p>
 
 
 ## MNIST with real-valued pairwise labels
 We also train the model with real-valued pairwise labels for the MNIST dataset. This setting is for illustration purposes only, but might not be useful in solving real-world problems. The embedding and generated results are shown below:
-<div class="row">
-    <div class="column">
-        <img width="45%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/real_embedding.png">  
-    </div>
-    <div class="column">
-        <img width="45%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/real_generated.png">
-    </div>
-</div>
+
+<p float="left">
+  <img src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/real_embedding.png"
+ width="45%" />
+  <img src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/real_generated.png" width="45%" /> 
+</p>
+
     
 
 

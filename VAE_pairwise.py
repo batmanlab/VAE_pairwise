@@ -282,7 +282,7 @@ class VAE_pairwise(nn.Module):
                                   (y_test, test_data.y[ [iii % test_data.n_data] ])
                               )
 
-        cmap=plt.get_cmap("twilight_shifted")
+        cmap=plt.get_cmap("plasma")
 
         z = z_test
         y = y_test
@@ -296,7 +296,7 @@ class VAE_pairwise(nn.Module):
 
         plt.figure(figsize=[8, 8])
 
-        img = plt.imshow(a, cmap="twilight_shifted")
+        img = plt.imshow(a, cmap="plasma")
         plt.gca().set_visible(False)
         cax = plt.axes([0.15, 0.2, 0.75, 0.6])
         plt.colorbar( ticks=range(10) )

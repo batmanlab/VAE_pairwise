@@ -19,35 +19,22 @@ from torch import nn, optim
 from torch.nn import functional as F
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.spatial.distance import pdist
 from torch.distributions.categorical import Categorical
+import matplotlib
 
     
     
 class VAE_pairwise(nn.Module):
     
-    def __init__(self, Dataset, K = 2, n_channels = 128, n_conv = 4, n_fc = 1, d_latent = 128, 
-                 alpha = 1., gamma = 1., C1 = 1., C2 = .1, beta1 = 1., beta2 = 1., 
-                 sigma = 45., cross_validate = None, noise = None, n_pairs = None, 
-                 batch_size = 32, lr = 1e-4, filename = "./model", 
-                 annealing = True, annealing_step = 2000, training_step = 100000000, 
-                 device="cuda"):
+    def __init__(self, train_data, D_u = 2, n_channels = 128, n_conv = 4, n_fc = 1, d_latent = 128, 
+                 eta1 = 1e3, eta2 = 2., beta_u = 1., beta_v = 1., 
+                 batch_size = 32, lr = 1e-4,
+                 device="cuda", filename = None):
         super(VAE_pairwise, self).__init__()
 
-        self.train_data = Dataset(True, sigma = sigma, cross_validate = cross_validate, 
-                                  validate_set = False, noise = noise, n_pairs = n_pairs)
+        self.train_data = train_data
         self.train_loader = torch.utils.data.DataLoader(self.train_data, 
-                            shuffle = True, batch_size = batch_size, num_workers = 0)
-        
-        if not cross_validate is None:
-            self.validate_data = Dataset(True, sigma = sigma, cross_validate = cross_validate, validate_set = True)
-            self.validate_loader = torch.utils.data.DataLoader(self.validate_data, 
-                            shuffle = True, batch_size = batch_size, num_workers = 0)
-            
-        
-        self.test_data = Dataset(False, sigma = sigma)
-        self.test_loader = torch.utils.data.DataLoader(self.test_data, 
-                            shuffle = False, batch_size = batch_size, num_workers = 0)
+                            shuffle = True, batch_size = batch_size, num_workers = 8)
             
         img_channels, self.n_pix, _ = self.train_data[0][0].shape
 
@@ -59,7 +46,6 @@ class VAE_pairwise(nn.Module):
             
         self.d_latent = d_latent
         self.n_conv = n_conv
-        self.n_fc = n_fc
         
         self.n_last_channels = n_channels * 2 ** (self.n_conv - 1)
         self.d_last_image = self.n_pix // 2 ** self.n_conv 
@@ -113,25 +99,16 @@ class VAE_pairwise(nn.Module):
             else:
                 self.decoders.append(nn.Linear(self.d_latent, self.d_fc))
         
-        self.K = K
+        self.D_u = D_u
         
-        self.alpha = alpha
         
-        self.beta1 = beta1
-        self.beta2 = beta2
+        self.beta_u = beta_u
+        self.beta_v = beta_v
 
-        self.gamma0 = gamma
-        
        
-        self.C1 = C1
-        self.C2 = C2
+        self.eta1 = eta1
+        self.eta2 = eta2
            
-        
-        self.filename = filename
-        self.annealing = annealing
-        self.annealing_step = annealing_step
-        self.training_step = training_step
-        
         
         self.device = device
         
@@ -139,12 +116,9 @@ class VAE_pairwise(nn.Module):
                                                         
         self.optimizer = optim.Adam(self.parameters(), lr = lr, weight_decay = 0.)
     
-        self.training_loss = []
-        self.test_loss = []
         self.n_step = 0
+        self.filename = filename
         
-        torch.cuda.manual_seed(0)
-
     
     def encode(self, X):
         res = X
@@ -181,40 +155,24 @@ class VAE_pairwise(nn.Module):
     
     
     def recon_loss(self, recon_x, x):
-        #criterion = nn.MSELoss(reduction = 'sum')
-        criterion = nn.BCELoss(reduction = 'sum')
+        criterion = nn.MSELoss(reduction = 'sum')
+#         criterion = nn.BCELoss(reduction = 'sum')
         return criterion(recon_x, x)
     
     def KLD(self, mu, log_var):
         
         tmp_KLD = .5 * (-1 - log_var + log_var.exp() + mu.pow(2)  )
-        KLD_1 = tmp_KLD[:, :self.K].sum()
-        KLD_2 = tmp_KLD[:, self.K:].sum()
+        KLD_1 = tmp_KLD[:, :self.D_u].sum()
+        KLD_2 = tmp_KLD[:, self.D_u:].sum()
         
-        return self.beta1 * KLD_1 + self.beta2 * KLD_2
+        return self.beta_u * KLD_1 + self.beta_v * KLD_2
         #return .5 * (-1 - log_var + log_var.exp() + mu.pow(2)  ).sum()
 
-    def VAE_loss_function(self, recon_x, x, mu, log_var):
-        return self.recon_loss(recon_x, x) + self.KLD(mu, log_var)
     
-    
-    def Classifier_loss(self, X_i, X_j, y_ij):
-        mu_i, log_var_i = self.encode(X_i)
-        Z_i = self.reparameterize(mu_i, log_var_i)
-        mu_j, log_var_j = self.encode(X_j)
-        Z_j = self.reparameterize(mu_j, log_var_j)
+    def Classifier_loss(self, Z_i, Z_j, y_ij):
+        diff = ( Z_i[:, :self.D_u] - Z_j[:, :self.D_u] ) ** 2
+        t = self.eta1 * ( diff.sum(1) - self.eta2 )
         
-        #t = self.C1 * ( torch.norm(Z_i[:, -self.K:] - Z_j[:, -self.K:], dim = 1) - torch.abs(self.C2) )
-        diff = ( Z_i[:, :self.K] - Z_j[:, :self.K] ) ** 2
-        
-        
-        
-        # t = self.W (diff) - self.C2
-        if self.annealing and self.n_step < self.annealing_step:
-            t = self.C1 * ( diff.sum(1) - self.C2 )
-        else:
-            t = self.C1 * ( diff.sum(1) - self.C2 )
-
         if self.binary_similarity:
             return - ( y_ij * F.logsigmoid( -t ) + (1 - y_ij) * F.logsigmoid( t ) ).sum()
         else:
@@ -229,105 +187,183 @@ class VAE_pairwise(nn.Module):
                      ).sum() 
         
 
-
-
-    def PD_norm(self, VAE_loss, Z):
-        return (
-            torch.autograd.grad(VAE_loss, Z,  create_graph=True)[0][:, :-self.K] ** 2
-        ).sum()
         
-        
-    def total_loss(self, X, X_i, X_j, y_ij):
+    def total_loss(self, X, X_i, X_j, y_ij, alpha = 1.):
         
         N = X.shape[0]
 
+        X_cat = torch.cat([X, X_i, X_j], 0)
         
-        C_loss = self.Classifier_loss(X_i, X_j, y_ij)
+        mu, log_var, X_recon, Z = self.forward(X_cat)
         
+        Z_i = Z[N : 2 * N]
+        Z_j = Z[2 * N :]
         
-        mu, log_var, X_recon, Z = self.forward(X)
-
-        #PD_loss = self.PD_norm(VAE_loss, Z)
-        
-        loss = self.gamma * self.recon_loss(X_recon, X) + self.KLD(mu, log_var) + self.alpha * C_loss  #+ self.gamma * PD_loss
+        C_loss = self.Classifier_loss(Z_i, Z_j, y_ij)
+        loss = alpha * self.recon_loss(X_recon[:N], X) + self.KLD(mu[:N], log_var[:N]) + C_loss  
         
         return loss
     
-    def train_model(self, epochs = 20, step = None):
-        
-        print ("epochs:", epochs)
-        print ("training_step", self.training_step)
+    def train_model(self, epochs = 20, warmup_step = 0):
         
         self.train()
         
-        if not self.annealing:
-            self.gamma = self.gamma0
-        
         for iii in range(epochs):
-            
-
-            ii = 0
-            n_data = 0
-            total_loss = 0.
-
             for data_batch in self.train_loader:
                 
-                if self.n_step > self.training_step:
-                    break
-
                 X = data_batch[0].to(self.device)
                 X_i = data_batch[1].to(self.device)
                 X_j = data_batch[2].to(self.device)
                 y_ij = data_batch[3].float().to(self.device)
                 
-                if self.annealing:
-                    rho = torch.sigmoid(
-                            torch.tensor( (self.n_step - self.annealing_step) / (self.annealing_step / 10) ) 
-                        ).to(self.device)
-                    self.gamma =  self.gamma0 * rho
-                
                 
                 batch_size = X.shape[0]
                 
-                loss = 0
-
                 self.optimizer.zero_grad()
                 
-                loss += self.total_loss(X, X_i, X_j, y_ij)
-
+                if self.n_step < warmup_step:
+                    loss = self.total_loss(X, X_i, X_j, y_ij, 
+                           alpha = F.relu(torch.tensor( 2 * self.n_step / warmup_step - 1 )
+                                         ).to(self.device)
+                                          )
+                                    
+                else:
+                    loss = self.total_loss(X, X_i, X_j, y_ij, alpha = 1.)
                 loss.backward()
 
                 self.optimizer.step()
                 
                 
-                total_loss += loss.item()
-                n_data += batch_size
 
-
-                
-                if not step is None:
-                    if ii > step:
-                        break
-
-                if ii % 100 == 0:
-                    print ( iii, self.n_step, total_loss / n_data, "\t", loss.item() / batch_size
+                if self.n_step % 500 == 0:
+                    print ( "epoch:{}/{} ,step:{}, Loss: {}".format(
+                                iii + 1, epochs, self.n_step, loss.item() / batch_size
+                            )
                           )
-                    print ( "Classifier Loss",  self.Classifier_loss(X_i, X_j, y_ij).item(),
-                            "gamma={}".format(self.gamma), 
-                            "C1 = {}".format(self.C1), 
-                            "C2 = {}".format(self.C2)
-                          )
+                    if not self.filename is None:
+                        torch.save(self.state_dict(), self.filename)
                     
-                    torch.save(self.state_dict(), self.filename)
-                ii +=1
                 self.n_step += 1
                     
 
-            if self.n_step >= self.training_step:
-                print("Finished training.", self.n_step, self.training_step)
-                torch.save(self.state_dict(), self.filename)
-                break
+        print("Finished training.")
+        if not self.filename is None:
+            torch.save(self.state_dict(), self.filename)
                 
+
+    def plot_embedding(self, test_data, d1 = 0, d2 = 1):
+        z_test = None
+
+        self.eval()
+
+        with torch.no_grad():
+            for iii in range(2000):
+                x_test = test_data[iii][0].view(1, *test_data[iii][0].shape).to("cuda")
+                mu, log_var = self.encode( x_test )
+                Z_test = self.reparameterize(mu, log_var)
+
+                if z_test is None:
+                    z_test = Z_test[:, :].to("cpu").data.numpy()
+                    y_test = test_data.y[ [iii % test_data.n_data] ]
+                else:
+                    z_test = np.concatenate(
+                                  ( z_test, Z_test[:, :].to("cpu").data.numpy() )
+                              )
+                    y_test = np.concatenate(
+                                  (y_test, test_data.y[ [iii % test_data.n_data] ])
+                              )
+
+        cmap=plt.get_cmap("twilight_shifted")
+
+        z = z_test
+        y = y_test
+
+        y_max = y.max()
+        y_min = y.min()
+        a = np.array([[y_min,y_max]])
+
+        font = {'size'   : 30}
+        matplotlib.rc('font', **font)
+
+        plt.figure(figsize=[8, 8])
+
+        img = plt.imshow(a, cmap="twilight_shifted")
+        # img = plt.imshow(a, cmap="plasma")
+        plt.gca().set_visible(False)
+        cax = plt.axes([0.15, 0.2, 0.75, 0.6])
+        plt.colorbar( ticks=range(10) )
+
+
+
+        for iii in range(len(z)):
+            plt.plot(z[iii, d1], z[iii, d2], ".", MarkerSize = 10, 
+                     Color = cmap( (y[iii] - y_min) / (y_max - y_min) ) )
+
+
+
+    def plot_generated(self, test_data, n_img = 10, z_min = -4, z_max = 4):
+
+        self.eval()
+
+
+        M = transforms.ToPILImage()
+
+        x_shape = test_data[0][0].shape
+        x_test = test_data[0][0].to(self.device).view(-1, *x_shape)
+
+
+        mu, log_var, recon_x, Z_test = self(x_test)
+
+        Z = mu.data
+
+        z_values = np.zeros([self.d_latent, n_img])
+
+
+        z_values[: , :] = np.linspace(z_min, z_max, n_img)
+
+        font = {'size'   : 30}
+        matplotlib.rc('font', **font)
+        
+        fig = plt.figure(figsize=[8, 8])
+
+
+
+
+        plt.subplots_adjust(left = .16, bottom = .15)
+
+        ax1 = fig.add_axes([.15, .15, .76, .75])
+        plt.axis('off')
+
+        M = transforms.ToPILImage()
+
+        iii = 1
+        jjj = 0
+
+        #iii = 43
+        #jjj = 13
+
+        #iii = 29
+        #jjj = 10
+
+
+        idx = 0
+
+
+
+        for ii in range(n_img):
+            for jj in range(n_img):
+                a = fig.add_subplot(n_img, n_img, idx + 1)
+                Z[0, iii] = z_values[iii][-(ii + 1)]
+                Z[0, jjj] = z_values[jjj][jj]
+                recon = self.decode(Z).to("cpu")[0]
+                #Img = M(recon[:, 20:45, 20:45])
+                Img = M(recon[:])
+                IMG = plt.imshow(Img, interpolation=None, cmap = "gray")
+                ax = fig.gca()
+                ax.set_axis_off()
+                idx += 1    
+        
+        
 
 
 

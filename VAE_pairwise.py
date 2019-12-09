@@ -1,17 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Jan  4 10:57:32 2019
-
-@author: juc91
-"""
-
-import PIL
-from PIL import Image
-import os
-from os.path import isfile, join 
-from scipy.io import loadmat
-
 import torch
 import torch.utils.data
 from torchvision import datasets, transforms
@@ -30,6 +16,10 @@ class VAE_pairwise(nn.Module):
                  eta1 = 1e3, eta2 = 2., beta_u = 1., beta_v = 1., 
                  batch_size = 32, lr = 1e-4,
                  device="cuda", filename = None):
+        """
+             D_u is the number of dimensions for $z^{(u)}$.
+             eta1, eta2, beta_u, beta_v are the hyper-parameters for the model.
+        """
         super(VAE_pairwise, self).__init__()
 
         self.train_data = train_data
@@ -51,7 +41,7 @@ class VAE_pairwise(nn.Module):
         self.d_last_image = self.n_pix // 2 ** self.n_conv 
         self.d_fc = self.n_last_channels * self.d_last_image ** 2
         
-        
+        #The convolutional encoder
         self.conv = nn.ModuleList()
         self.conv_bn = nn.ModuleList()
         
@@ -65,7 +55,7 @@ class VAE_pairwise(nn.Module):
             output_channel = 2 ** (ii+1) * n_channels
         
         
-            
+        #The convolutional decoder
         self.deconv = nn.ModuleList()
         self.deconv_bn = nn.ModuleList()
         
@@ -80,7 +70,7 @@ class VAE_pairwise(nn.Module):
             self.deconv.append(nn.ConvTranspose2d(input_channel, output_channel, 4, 2, 1))
             self.deconv_bn.append(nn.BatchNorm2d(input_channel))
             
-
+        # Fully connected layers for both the encoder and the ecoder.
         self.encoders = nn.ModuleList()
         self.decoders = nn.ModuleList()
 
@@ -121,6 +111,9 @@ class VAE_pairwise(nn.Module):
         
     
     def encode(self, X):
+        """
+        Encode the image X.
+        """
         res = X
         for ii in range(self.n_conv):
             res = F.leaky_relu_(self.conv_bn[ii](self.conv[ii](res)))
@@ -130,11 +123,17 @@ class VAE_pairwise(nn.Module):
         return self.mu_layer(res), self.var_layer(res)
     
     def reparameterize(self, mu, log_var):
+        """
+        Reparameterization.
+        """
         std = torch.exp(0.5*log_var)
         eps = torch.randn_like(std)
         return eps.mul_(std).add_(mu)
     
     def decode(self, Z):
+        """
+        Decode the latent representation Z.
+        """
         res = Z
         for M in self.decoders[:]:
             res = F.leaky_relu_(M(res))
@@ -155,12 +154,16 @@ class VAE_pairwise(nn.Module):
     
     
     def recon_loss(self, recon_x, x):
+        """
+            Reconstruction Loss (MSE).
+        """
         criterion = nn.MSELoss(reduction = 'sum')
-#         criterion = nn.BCELoss(reduction = 'sum')
         return criterion(recon_x, x)
     
     def KLD(self, mu, log_var):
-        
+        """
+            The KL divergence term.
+        """
         tmp_KLD = .5 * (-1 - log_var + log_var.exp() + mu.pow(2)  )
         KLD_1 = tmp_KLD[:, :self.D_u].sum()
         KLD_2 = tmp_KLD[:, self.D_u:].sum()
@@ -169,7 +172,10 @@ class VAE_pairwise(nn.Module):
         #return .5 * (-1 - log_var + log_var.exp() + mu.pow(2)  ).sum()
 
     
-    def Classifier_loss(self, Z_i, Z_j, y_ij):
+    def Similarity_loss(self, Z_i, Z_j, y_ij):
+        """
+            The loss due to similarities.
+        """
         diff = ( Z_i[:, :self.D_u] - Z_j[:, :self.D_u] ) ** 2
         t = self.eta1 * ( diff.sum(1) - self.eta2 )
         
@@ -199,7 +205,7 @@ class VAE_pairwise(nn.Module):
         Z_i = Z[N : 2 * N]
         Z_j = Z[2 * N :]
         
-        C_loss = self.Classifier_loss(Z_i, Z_j, y_ij)
+        C_loss = self.Similarity_loss(Z_i, Z_j, y_ij)
         loss = alpha * self.recon_loss(X_recon[:N], X) + self.KLD(mu[:N], log_var[:N]) + C_loss  
         
         return loss
@@ -252,6 +258,9 @@ class VAE_pairwise(nn.Module):
                 
 
     def plot_embedding(self, test_data, d1 = 0, d2 = 1):
+        """
+        Plot the embeddings.
+        """
         z_test = None
 
         self.eval()
@@ -288,7 +297,6 @@ class VAE_pairwise(nn.Module):
         plt.figure(figsize=[8, 8])
 
         img = plt.imshow(a, cmap="twilight_shifted")
-        # img = plt.imshow(a, cmap="plasma")
         plt.gca().set_visible(False)
         cax = plt.axes([0.15, 0.2, 0.75, 0.6])
         plt.colorbar( ticks=range(10) )
@@ -301,7 +309,10 @@ class VAE_pairwise(nn.Module):
 
 
 
-    def plot_generated(self, test_data, n_img = 10, z_min = -4, z_max = 4):
+    def plot_generated(self, test_data, n_img = 10, z_min = -4, z_max = 4, d1 = 0, d2 = 1):
+        """
+        Plot the generated images.
+        """
 
         self.eval()
 
@@ -336,25 +347,13 @@ class VAE_pairwise(nn.Module):
 
         M = transforms.ToPILImage()
 
-        iii = 1
-        jjj = 0
-
-        #iii = 43
-        #jjj = 13
-
-        #iii = 29
-        #jjj = 10
-
-
         idx = 0
-
-
 
         for ii in range(n_img):
             for jj in range(n_img):
                 a = fig.add_subplot(n_img, n_img, idx + 1)
-                Z[0, iii] = z_values[iii][-(ii + 1)]
-                Z[0, jjj] = z_values[jjj][jj]
+                Z[0, d2] = z_values[d1][-(ii + 1)]
+                Z[0, d1] = z_values[d1][jj]
                 recon = self.decode(Z).to("cpu")[0]
                 #Img = M(recon[:, 20:45, 20:45])
                 Img = M(recon[:])

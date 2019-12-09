@@ -22,6 +22,14 @@ We include an example of training script in test.ipynb.
 ## MNIST with binary pairwise labels
 We train the model with binary pairwise labels for the MNIST dataset. The embedding and generated results are shown below:
 
+<div class="row">
+  <div class="column">
+    <img width="45%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/binary_embedding.png">  </div>
+  <div class="column">
+    <img width="45%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/binary_generated.png">
+  </div>
+
+
 <img width="45%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/binary_embedding.png">
 
 <img width="45%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/binary_generated.png">

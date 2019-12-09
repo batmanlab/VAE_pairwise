@@ -8,7 +8,7 @@ This repository contains the PyTorch source code for the paper [Weakly Supervise
 In this paper, we propose a setting where the user introduces weaksupervision by providing similarities between instances (denoted by $y_{ij}$) based on a factor  to  be  disentangled. The  similarity  is  providedas  either  a  binary  (yes/no)  or  real-valued  label  describingwhether a pair of instances are similar or not. We propose a new method for weakly supervised disentanglement of latent variables within the framework of Variational Autoencoder.
 
 <p align="center">
-  <img width="95%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/model.jpg">
+  <img width="80%" src="https://github.com/batmanlab/VAE_pairwise/blob/master/figure/model.jpg">
 </p>
 
 

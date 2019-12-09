@@ -3,7 +3,7 @@
 This repository contains the PyTorch source code for the paper [Weakly Supervised Disentanglement by Pairwise Similarities](https://arxiv.org/abs/1906.01044) by Junxiang Chen and Kayhan Batmanghelich. 
 
 
-## Model
+# Model
 
 In this paper, we propose a setting where the user introduces weaksupervision by providing similarities between instances (denoted by $y_{ij}$) based on a factor  to  be  disentangled. The  similarity  is  providedas  either  a  binary  (yes/no)  or  real-valued  label  describingwhether a pair of instances are similar or not. We propose a new method for weakly supervised disentanglement of latent variables within the framework of Variational Autoencoder.
 
@@ -12,7 +12,7 @@ In this paper, we propose a setting where the user introduces weaksupervision by
 </p>
 
 
-## Environment 
+# Environment 
 To prepare for the environment for running our code, run 
 
 ```conda env create -f VAE_pairwise.yml```
